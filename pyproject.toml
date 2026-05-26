@@ -1,0 +1,45 @@
+[project]
+name = "Common-test-MCP"
+version = "0.7.4"
+description = "MCP server for running tests across pytest / Jest / Cypress / Go test / Maestro / Schemathesis / Newman (web + mobile + native API via OpenAPI + Postman collections), with self-improvement analytics, a bilingual (EN / zh-TW) built-in QA knowledge layer, and an AI Visual Challenge Solver for reCAPTCHA v2 + hCaptcha image-grid challenges (Common-test-MCP)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "JkitH" }]
+keywords = ["mcp", "testing", "qa", "pytest", "playwright", "jest", "cypress", "maestro", "schemathesis", "newman", "postman", "openapi", "api-testing", "automation", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "playwright>=1.40.0",
+    "pytest>=8.0.0",
+    "pytest-playwright>=0.4.0",
+    "pytest-json-report>=1.5.0",
+]
+
+[project.optional-dependencies]
+# Native API testing via Schemathesis (QA_RUNNER=schemathesis). Optional so
+# the base install stays slim; users opt in with `pip install 'Common-test-MCP[api]'`.
+api = ["schemathesis>=3.0,<4"]
+
+[project.urls]
+Homepage = "https://github.com/JkitH/Common-test-MCP"
+Repository = "https://github.com/JkitH/Common-test-MCP"
+
+[project.scripts]
+Common-test-MCP = "common_test_mcp.server:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/common_test_mcp"]

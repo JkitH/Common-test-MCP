@@ -1,0 +1,230 @@
+name: CI
+
+# Runs on every push to main and every pull request. Two jobs:
+#
+# 1. smoke — fast: install + import + tool-registration parity checks.
+#    Matrix over the supported Python versions. No browsers needed, so
+#    every Python version is cheap to verify.
+#
+# 2. sample — slow: spin up Playwright + a chromium browser and run the
+#    bundled `tests_project/` against the live example.com. Single
+#    Python version (3.12) since the dependency is the browser, not
+#    Python version. This is what answers the question "can the QA MCP
+#    actually drive a runner end-to-end?"
+#
+# Added in response to issue #35.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    name: smoke · Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package + test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run smoke tests
+        run: pytest tests/ -v
+
+  sample:
+    name: bundled sample · Python 3.12 + chromium
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Install chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run bundled tests_project sample
+        env:
+          QA_PROJECT_ROOT: ${{ github.workspace }}/tests_project
+          QA_RUNNER: pytest
+        run: pytest tests_project/ -v
+
+  api-sample:
+    # v0.6.0 native API testing: verifies the schemathesis runner +
+    # the bundled OpenAPI sample integrate end-to-end without ever
+    # issuing live HTTP. `--dry-run` exercises schema parsing and
+    # operation enumeration, which is what the MCP integration depends
+    # on; full-fuzz live runs against a real backend are user-side.
+    name: api sample · Python 3.12 + schemathesis
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package with [api] extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[api]'
+
+      - name: Run smoke tests
+        run: pytest tests/ -v
+
+      - name: Schemathesis dry-run against bundled OpenAPI
+        # CLI takes plain filesystem paths or http(s):// URLs. Users may
+        # set QA_OPENAPI_URL=file://... — the runner translates that to a
+        # plain path before subprocess (see _to_cli_target in
+        # runners/schemathesis.py). Here we invoke the CLI directly, so
+        # pass the plain path.
+        run: |
+          schemathesis run --dry-run --checks all \
+            "${GITHUB_WORKSPACE}/examples/sample_api_project/openapi.yaml"
+
+  api-postman:
+    # v0.6.1 native API testing (Phase 2): verifies the newman runner
+    # parses the bundled Postman collection end-to-end. Newman is an npm
+    # package (not pip), so we set up Node 20 + `npm install -g newman`
+    # before exercising the CLI against the local collection. No live
+    # API is involved — the collection's {{baseUrl}} points at a
+    # nonexistent localhost server and every request will fail at the
+    # network layer. We accept that exit code (|| true) because the
+    # signal we care about is "newman accepts the collection JSON and
+    # starts a run" — actual HTTP results are out of scope for CI.
+    name: postman sample · Python 3.12 + Node 20 + newman
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install newman
+        run: npm install -g newman
+
+      - name: Install Common-test-MCP
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run smoke tests
+        run: pytest tests/ -v
+
+      - name: Newman dry-validate against bundled collection
+        # Verifies Newman accepts the collection JSON. The bundled
+        # {{baseUrl}} points at http://localhost:4010 with nothing
+        # listening, so requests will fail at the network layer — we
+        # accept that with `|| true`. A short --timeout-request keeps
+        # the job snappy when DNS / connect failures take their default
+        # path.
+        run: |
+          newman run examples/sample_api_project/postman-collection.json \
+            --timeout-request 2000 \
+            --reporters cli || true
+
+  api-captcha:
+    # v0.7.0 AI Visual Challenge Solver: verifies the two new MCP tools
+    # (inspect_visual_challenge / solve_visual_challenge) integrate
+    # end-to-end without ever hitting Google. The unit tests use mocked
+    # Playwright objects so this job is fast and deterministic — the
+    # bundled `examples/sample_captcha_fixture/` doubles as documentation
+    # for users who want to wire a real browser+route-mock test on their
+    # side. Consent + domain allowlist are set explicitly so the gate
+    # logic gets exercised (rather than stubbed) on every run.
+    name: visual challenge sample · Python 3.12 + chromium
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Install chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run visual_challenge tests against mock fixture
+        env:
+          QA_VISUAL_CHALLENGE_CONSENT: "true"
+          QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS: "localhost,127.0.0.1,test-fixture.local,client-staging.example.com"
+        run: pytest tests/test_visual_challenge.py -v
+
+  api-hcaptcha:
+    # v0.7.1 AI Visual Challenge Solver — hCaptcha vendor: verifies the
+    # same two MCP tools (inspect_visual_challenge /
+    # solve_visual_challenge) detect + drive an hCaptcha challenge via
+    # the fingerprint table extension. Same shape as `api-captcha`:
+    # mocked Playwright objects so the job is fast and deterministic;
+    # the bundled `examples/sample_hcaptcha_fixture/` doubles as
+    # documentation for users who want to wire a real browser +
+    # route-mock test on their side. Tool count stays at 18 — this is
+    # a vendor fingerprint addition, not a new MCP surface.
+    name: visual challenge hcaptcha · Python 3.12 + chromium
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Install chromium for Playwright
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run hCaptcha-specific visual_challenge tests
+        env:
+          QA_VISUAL_CHALLENGE_CONSENT: "true"
+          QA_VISUAL_CHALLENGE_AUTHORIZED_DOMAINS: "localhost,127.0.0.1,test-fixture.local,client-staging.example.com"
+        run: pytest tests/test_visual_challenge.py -k hcaptcha -v

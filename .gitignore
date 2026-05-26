@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+tests_project/report.json
+tests_project/report.html
+tests_project/optimization-plan.md
+tests_project/junit.xml
+tests_project/test-results/
+.DS_Store
+
+# Stray runner artifacts (run from PROJECT_ROOT during dev)
+.newman-report.json
+.schemathesis-report.json

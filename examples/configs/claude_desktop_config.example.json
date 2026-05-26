@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "Common-test-MCP": {
+      "command": "uvx",
+      "args": ["Common-test-MCP"],
+      "env": {
+        "QA_RUNNER": "pytest",
+        "QA_PROJECT_ROOT": "/absolute/path/to/your-test-project"
+      }
+    }
+  }
+}

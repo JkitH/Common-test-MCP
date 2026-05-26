@@ -1,0 +1,19 @@
+# Codex CLI MCP config example
+# Location: ~/.codex/config.toml
+# Docs: https://github.com/openai/codex (MCP server section)
+
+[mcp_servers.Common-test-MCP]
+command = "uvx"
+args = ["Common-test-MCP"]
+
+[mcp_servers.Common-test-MCP.env]
+QA_RUNNER = "pytest"
+QA_PROJECT_ROOT = "/absolute/path/to/your-test-project"
+
+# Optional: point at a non-default QA knowledge file
+# QA_KNOWLEDGE_FILE = "/absolute/path/to/some/qa-knowledge.md"
+
+# Optional: BlueStacks / Genymotion / remote-ADB endpoint. When set, the
+# Maestro runner auto-runs `adb connect <host>` before each test and
+# `analyze_screen` call. Requires `adb` on PATH.
+# QA_ANDROID_HOST = "127.0.0.1:5555"
